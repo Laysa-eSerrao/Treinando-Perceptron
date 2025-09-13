@@ -1,0 +1,161 @@
+'''python
+import numpy as np
+import itertools
+from typing import Callable, Tuple, List
+
+class Perceptron:
+    """
+    Perceptron genérico com:
+    - número arbitrário de entradas (n_features)
+    - função de ativação configurável (sigmoid ou degrau)
+    - treinamento por gradiente simples (quando ativação sigmoide) ou regra do perceptron (quando degrau)
+    """
+    def _init_(self, n_features: int, activation: str = "sigmoid", seed: int = 42):
+        self.n_features = n_features
+        self.activation_name = activation.lower()
+        self.rng = np.random.default_rng(seed)
+        # pesos + bias (último termo do vetor W será o bias)
+        self.W = self.rng.uniform(-1, 1, size=(n_features + 1,))
+        if self.activation_name not in {"sigmoid", "step"}:
+            raise ValueError("activation must be 'sigmoid' or 'step'")
+
+    # ======== Funções de ativação extraídas =========
+    @staticmethod
+    def _sigmoid(x: np.ndarray) -> np.ndarray:
+        return 1.0 / (1.0 + np.exp(-x))
+
+    @staticmethod
+    def _sigmoid_deriv(y: np.ndarray) -> np.ndarray:
+        # derivada em termos da saída y = sigmoid(x)
+        return y * (1.0 - y)
+
+    @staticmethod
+    def _step(x: np.ndarray) -> np.ndarray:
+        return (x > 0).astype(float)
+
+    # ======== Forward =========
+    def _net(self, X: np.ndarray) -> np.ndarray:
+        # X shape: (n_samples, n_features)
+        # W shape: (n_features + 1,)  -> W[:-1] = pesos; W[-1] = bias
+        return X @ self.W[:-1] + self.W[-1]
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        z = self._net(X)
+        if self.activation_name == "sigmoid":
+            return self._sigmoid(z)
+        else:  # step
+            return self._step(z)
+
+    def predict(self, X: np.ndarray, threshold: float = 0.5) -> np.ndarray:
+        proba = self.predict_proba(X)
+        if self.activation_name == "sigmoid":
+            return (proba >= threshold).astype(int)
+        else:
+            return proba.astype(int)
+
+    # ======== Treinamento =========
+    def fit(self, X: np.ndarray, y: np.ndarray, learning_rate: float = 0.1, epochs: int = 100) -> "Perceptron":
+        """
+        - Para ativação 'sigmoid': atualizamos W via gradiente do erro quadrático médio.
+        - Para ativação 'step': usa-se a regra clássica do perceptron (atualiza somente em erro de classificação).
+        """
+        y = y.reshape(-1, 1).astype(float)  # garante coluna
+        for _ in range(epochs):
+            # Embaralhar amostras a cada época ajuda a estabilidade
+            idx = np.arange(X.shape[0])
+            np.random.shuffle(idx)
+            for i in idx:
+                xi = X[i:i+1, :]  # (1, n_features)
+                target = y[i, 0]  # escalar
+                z = self._net(xi)[0]
+                if self.activation_name == "sigmoid":
+                    out = self._sigmoid(z)
+                    # erro = target - out
+                    # gradiente do MSE: dE/dW = -(erro) * deriv(sigmoid(z)) * x
+                    grad_common = (target - out) * self._sigmoid_deriv(out)
+                    self.W[:-1] += learning_rate * grad_common * xi.ravel()
+                    self.W[-1]  += learning_rate * grad_common
+                else:  # step (regra do perceptron)
+                    out = 1.0 if z > 0 else 0.0
+                    error = target - out
+                    if error != 0.0:
+                        self.W[:-1] += learning_rate * error * xi.ravel()
+                        self.W[-1]  += learning_rate * error
+        return self
+
+# ======== Datasets de portas lógicas ========
+def make_or_dataset():
+    X = np.array([[0,0],[0,1],[1,0],[1,1]], dtype=float)
+    y = np.array([0,1,1,1], dtype=int)
+    return X, y
+
+def make_and_dataset():
+    X = np.array([[0,0],[0,1],[1,0],[1,1]], dtype=float)
+    y = np.array([0,0,0,1], dtype=int)
+    return X, y
+
+def make_and3_dataset():
+    # AND de 3 entradas: só é 1 quando (1,1,1)
+    X = np.array(list(itertools.product([0,1],[0,1],[0,1])), dtype=float)  # 8 combinações
+    y = np.array([1 if tuple(row) == (1,1,1) else 0 for row in X], dtype=int)
+    return X, y
+
+def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    return (y_true == y_pred).mean()
+
+def run_experiments():
+    results = []
+
+    # 1) Impacto da taxa de aprendizado (OR com sigmoid, epochs=200)
+    X_or, y_or = make_or_dataset()
+    for lr in [0.01, 0.1, 0.5, 1.0]:
+        model = Perceptron(n_features=X_or.shape[1], activation="sigmoid", seed=0)
+        model.fit(X_or, y_or, learning_rate=lr, epochs=200)
+        yhat = model.predict(X_or)
+        acc = accuracy(y_or, yhat)
+        results.append({"exp": "OR-sigmoid", "param": f"lr={lr}, epochs=200", "accuracy": float(acc)})
+
+    # 2) Impacto do número de épocas (OR com sigmoid, lr=0.1)
+    for ep in [10, 50, 200, 500]:
+        model = Perceptron(n_features=X_or.shape[1], activation="sigmoid", seed=1)
+        model.fit(X_or, y_or, learning_rate=0.1, epochs=ep)
+        yhat = model.predict(X_or)
+        acc = accuracy(y_or, yhat)
+        results.append({"exp": "OR-sigmoid", "param": f"lr=0.1, epochs={ep}", "accuracy": float(acc)})
+
+    # 3) Porta AND (sigmoid e degrau)
+    X_and, y_and = make_and_dataset()
+    for act in ["sigmoid", "step"]:
+        model = Perceptron(n_features=X_and.shape[1], activation=act, seed=2)
+        model.fit(X_and, y_and, learning_rate=0.1, epochs=200)
+        yhat = model.predict(X_and)
+        acc = accuracy(y_and, yhat)
+        results.append({"exp": f"AND-{act}", "param": "lr=0.1, epochs=200", "accuracy": float(acc)})
+
+    # 4) Porta OR (degrau) para comparar
+    model = Perceptron(n_features=X_or.shape[1], activation="step", seed=3)
+    model.fit(X_or, y_or, learning_rate=0.1, epochs=50)
+    yhat = model.predict(X_or)
+    acc = accuracy(y_or, yhat)
+    results.append({"exp": "OR-step", "param": "lr=0.1, epochs=50", "accuracy": float(acc)})
+
+    # 5) (Opcional) Três entradas: AND de 3 entradas (sigmoid e degrau)
+    X3, y3 = make_and3_dataset()
+    for act in ["sigmoid", "step"]:
+        model = Perceptron(n_features=X3.shape[1], activation=act, seed=4)
+        model.fit(X3, y3, learning_rate=0.1, epochs=500)
+        yhat = model.predict(X3)
+        acc = accuracy(y3, yhat)
+        results.append({"exp": f"AND3-{act}", "param": "lr=0.1, epochs=500", "accuracy": float(acc)})
+
+    # Print bonitinho
+    lines = []
+    lines.append("==== Experimentos com Perceptron (AND/OR) ====")
+    for r in results:
+        lines.append(f"{r['exp']:<12} | {r['param']:<22} | acc={r['accuracy']:.2f}")
+    report_text = "\n".join(lines)
+    print(report_text)
+    return results, report_text
+
+if _name_ == "_main_":
+    results, report = run_experiments()
