@@ -19,7 +19,7 @@ class Perceptron:
         if self.activation_name not in {"sigmoid", "step"}:
             raise ValueError("activation must be 'sigmoid' or 'step'")
 
-    # ======== Funções de ativação extraídas =========
+    # Funções de ativação extraídas 
     @staticmethod
     def _sigmoid(x: np.ndarray) -> np.ndarray:
         return 1.0 / (1.0 + np.exp(-x))
@@ -33,7 +33,7 @@ class Perceptron:
     def _step(x: np.ndarray) -> np.ndarray:
         return (x > 0).astype(float)
 
-    # ======== Forward =========
+    # Forward 
     def _net(self, X: np.ndarray) -> np.ndarray:
         # X shape: (n_samples, n_features)
         # W shape: (n_features + 1,)  -> W[:-1] = pesos; W[-1] = bias
@@ -53,7 +53,7 @@ class Perceptron:
         else:
             return proba.astype(int)
 
-    # ======== Treinamento =========
+    # Treinamento
     def fit(self, X: np.ndarray, y: np.ndarray, learning_rate: float = 0.1, epochs: int = 100) -> "Perceptron":
         """
         - Para ativação 'sigmoid': atualizamos W via gradiente do erro quadrático médio.
@@ -83,7 +83,7 @@ class Perceptron:
                         self.W[-1]  += learning_rate * error
         return self
 
-# ======== Datasets de portas lógicas ========
+# Datasets de portas lógicas
 def make_or_dataset():
     X = np.array([[0,0],[0,1],[1,0],[1,1]], dtype=float)
     y = np.array([0,1,1,1], dtype=int)
@@ -150,12 +150,12 @@ def run_experiments():
 
     # Print bonitinho
     lines = []
-    lines.append("==== Experimentos com Perceptron (AND/OR) ====")
+    lines.append("Experimentos com Perceptron (AND/OR)")
     for r in results:
         lines.append(f"{r['exp']:<12} | {r['param']:<22} | acc={r['accuracy']:.2f}")
     report_text = "\n".join(lines)
     print(report_text)
     return results, report_text
 
-if _name_ == "_main_":
+if _name_ "_main_":
     results, report = run_experiments()
